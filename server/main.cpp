@@ -1,0 +1,153 @@
+#include <chrono>
+#include <cstdlib>
+#include <enet/enet.h>
+#include <enet/types.h>
+#include <sstream>
+#include <string>
+#include <time.h>
+#include <unistd.h>
+#include <vector>
+
+#include "actor.h"
+#include "actor_serializer.h"
+#include "map.h"
+#include "vector.h"
+#include "actor_serializer.h"
+#include <nlohmann/json.hpp>
+
+#include <spdlog/spdlog.h>
+
+using json = nlohmann::json;
+
+class timer {
+  // alias our types for simplicity
+  using clock = std::chrono::system_clock;
+  using time_point_type =
+      std::chrono::time_point<clock, std::chrono::milliseconds>;
+
+public:
+  // default constructor that stores the start time
+  timer() { set_start(); }
+
+  void set_start() {
+    start =
+        std::chrono::time_point_cast<std::chrono::milliseconds>(clock::now());
+  }
+
+  // gets the time elapsed from construction.
+  long /*milliseconds*/ getTimePassed() {
+    // get the new time
+    auto end = clock::now();
+
+    // return the difference of the times
+    return (end - start).count();
+  }
+
+private:
+  time_point_type start;
+};
+
+void setup_asteroids(std::vector<rapinae::RWActor> &asteroids) {
+  for (rapinae::RWActor &a : asteroids) {
+    rapinae::Vector2 *position = new rapinae::Vector2(0.0, 0.0);
+    rapinae::Vector2 *lin_vel = new rapinae::Vector2(100.0, 0.0);
+    a.add_or_update_attr("position", position);
+    a.add_or_update_attr("lin_vel", lin_vel);
+    a.add_or_update_attr("rot_vel", 1.0);
+    a.add_or_update_attr("scene", "Asteroid1.tscn");
+  }
+}
+
+void send_map_data(const ENetEvent &event, const rapinae::SMap &map) {
+  json map_data = {
+      {"mapdata", std::format("({:d}|{:d})", map.get_w(), map.get_h())}};
+  std::ostringstream stream;
+  stream << map_data << '\0';
+  std::string data = stream.str();
+  ENetPacket *packet = enet_packet_create(data.c_str(), data.length(),
+                                          ENET_PACKET_FLAG_RELIABLE);
+  spdlog::info(std::string((char *)packet->data));
+  enet_peer_send(event.peer, (enet_uint8)0, packet);
+}
+
+void send_actor_data(const ENetHost *server,
+                     const std::vector<rapinae::RWActor> &actors) {
+  if (server->connectedPeers == 0)
+    return;
+
+  std::ostringstream stream;
+  stream << "{\"actordata\":[";
+  bool first = true;
+  for (rapinae::RWActor a : actors) {
+    if (!first) stream << ',';
+    else first = false;
+    stream << rapinae::serialize_to_json(a, true);
+  }
+  stream << "]}\0";
+  std::string data = stream.str();
+  spdlog::info("Sending data: {:s}", data);
+  for (size_t i = 0; i < server->peerCount; ++i) {
+    if (server->peers[i].state != ENetPeerState::ENET_PEER_STATE_CONNECTED)
+      continue;
+
+    ENetPacket *packet = enet_packet_create(
+        data.c_str(), data.length(), ENET_PACKET_FLAG_UNRELIABLE_FRAGMENT);
+    enet_peer_send(&(server->peers[i]), (enet_uint8)0, packet);
+  }
+}
+
+int main() {
+  if (enet_initialize() != 0) {
+    spdlog::error("An error occurred while initializing ENet.\n");
+    return EXIT_FAILURE;
+  }
+
+  ENetAddress address;
+  ENetHost *server;
+  ENetEvent event;
+  rapinae::SMap map = rapinae::SMap(500, 500);
+  std::vector<rapinae::RWActor> asteroids = {rapinae::RWActor("1")};
+  timer loop_timer;
+
+  setup_asteroids(asteroids);
+
+  /* Bind the server to the default localhost.     */
+  /* A specific host address can be specified by   */
+  /* enet_address_set_host (& address, "x.x.x.x"); */
+
+  address.host = ENET_HOST_ANY;
+  /* Bind the server to port 1234. */
+  address.port = 1234;
+
+  server = enet_host_create(
+      &address /* the address to bind the server host to */,
+      32 /* allow up to 32 clients and/or outgoing connections */,
+      2 /* allow up to 2 channels to be used, 0 and 1 */,
+      0 /* assume any amount of incoming bandwidth */,
+      0 /* assume any amount of outgoing bandwidth */);
+  if (server == NULL) {
+    fprintf(stderr,
+            "An error occurred while trying to create an ENet server host.\n");
+    exit(EXIT_FAILURE);
+  }
+
+  while (1) {
+    spdlog::info("Loop start");
+    loop_timer.set_start();
+
+    enet_host_service(server, &event, 0);
+    if (event.type == ENET_EVENT_TYPE_CONNECT)
+      send_map_data(event, map);
+    if (event.type == ENET_EVENT_TYPE_RECEIVE) {
+      spdlog::info("RECV: {:s}", std::string((char *)event.packet->data));
+      enet_packet_destroy(event.packet);
+    }
+    if (event.type == ENET_EVENT_TYPE_DISCONNECT)
+      spdlog::info("DISCONNECTED");
+    send_actor_data(server, asteroids);
+    sleep(1);
+  }
+
+  enet_host_destroy(server);
+  atexit(enet_deinitialize);
+}

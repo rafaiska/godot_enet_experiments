@@ -1,0 +1,12 @@
+# Godot 4+ specific ignores
+client/.godot/
+client/android/
+
+# Object files
+*.o
+
+# Runnable binaries
+server/rapinae
+
+# Binary assets
+*.png
