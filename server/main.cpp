@@ -1,4 +1,3 @@
-#include <chrono>
 #include <cstdlib>
 #include <enet/enet.h>
 #include <enet/types.h>
@@ -11,41 +10,17 @@
 #include "actor.h"
 #include "actor_serializer.h"
 #include "map.h"
+#include "physics_processor.h"
+#include "timer.h"
 #include "vector.h"
 #include "actor_serializer.h"
 #include <nlohmann/json.hpp>
 
 #include <spdlog/spdlog.h>
 
+#define NETWORK_UPDATE_DELAY_MS 50
+
 using json = nlohmann::json;
-
-class timer {
-  // alias our types for simplicity
-  using clock = std::chrono::system_clock;
-  using time_point_type =
-      std::chrono::time_point<clock, std::chrono::milliseconds>;
-
-public:
-  // default constructor that stores the start time
-  timer() { set_start(); }
-
-  void set_start() {
-    start =
-        std::chrono::time_point_cast<std::chrono::milliseconds>(clock::now());
-  }
-
-  // gets the time elapsed from construction.
-  long /*milliseconds*/ getTimePassed() {
-    // get the new time
-    auto end = clock::now();
-
-    // return the difference of the times
-    return (end - start).count();
-  }
-
-private:
-  time_point_type start;
-};
 
 void setup_asteroids(std::vector<rapinae::RWActor> &asteroids) {
   for (rapinae::RWActor &a : asteroids) {
@@ -107,7 +82,9 @@ int main() {
   ENetEvent event;
   rapinae::SMap map = rapinae::SMap(500, 500);
   std::vector<rapinae::RWActor> asteroids = {rapinae::RWActor("1")};
-  timer loop_timer;
+  rapinae::RWTimer loop_timer;
+  float time_since_last_nw_update = 0.0;
+  rapinae::PhysicsProcessor physics_processor(rapinae::Vector2(500, 500));
 
   setup_asteroids(asteroids);
 
@@ -132,7 +109,9 @@ int main() {
   }
 
   while (1) {
-    spdlog::info("Loop start");
+    float delta = loop_timer.getElapsedTimeMs();
+    physics_processor.update_velocity(asteroids, delta);
+    time_since_last_nw_update += delta;
     loop_timer.set_start();
 
     enet_host_service(server, &event, 0);
@@ -144,8 +123,12 @@ int main() {
     }
     if (event.type == ENET_EVENT_TYPE_DISCONNECT)
       spdlog::info("DISCONNECTED");
-    send_actor_data(server, asteroids);
-    sleep(1);
+
+    if (time_since_last_nw_update > NETWORK_UPDATE_DELAY_MS) {
+      spdlog::info("Trying to send actor data (elapsed time: {:f}ms)", time_since_last_nw_update);
+      send_actor_data(server, asteroids);
+      time_since_last_nw_update = 0.0;
+    }
   }
 
   enet_host_destroy(server);

@@ -30,6 +30,7 @@ namespace rapinae {
             void add_or_update_attr(std::string name, rapinae::Vector2 *value);
             std::vector<rapinae::RWAttr> get_updated_attrs() const;
             std::vector<rapinae::RWAttr> get_all_attrs() const;
+            void set_attr_updated(std::string attr_name);
     };
 }
 

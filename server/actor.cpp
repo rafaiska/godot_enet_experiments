@@ -70,3 +70,7 @@ std::vector<rapinae::RWAttr> rapinae::RWActor::get_all_attrs() const {
     }
     return vector;
 }
+
+void rapinae::RWActor::set_attr_updated(std::string attr_name) {
+    attributes.at(attr_name).set_value_changed(true);
+}

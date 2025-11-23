@@ -28,6 +28,7 @@ private:
 public:
   RWAttr(std::string name);
 
+  void set_value_changed(bool _changed) {value_changed = _changed;}
   void set_d_value(double _d_value);
   void set_i_value(int32_t _i_value);
   void set_s_value(std::string &_s_value);

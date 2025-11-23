@@ -1,7 +1,6 @@
 extends Node2D
 
 var conn: ENetConnection
-var tick: float = 0.0
 
 var arena_size: float
 
@@ -29,7 +28,7 @@ func _init() -> void:
 	conn = ENetConnection.new()
 	bg = ImageTexture.create_from_image(create_bg_texture())
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	if (bg != null and bg_sprite != null):
 		bg_sprite.texture = bg
 		bg_sprite.self_modulate = Color(0.404, 0.0, 0.902, 1.0)
@@ -38,13 +37,9 @@ func _process(delta: float) -> void:
 	if conn.get_peers().size() < 1 or _not_connected():
 		_connect()
 	
-	tick += delta
-	if tick > 1.0:
-		tick = 0.0
-		_handle_return(conn.service(0))
-		for p: ENetPacketPeer in conn.get_peers():
-			print(p)
-			p.send(0, PackedByteArray("papa".to_multibyte_char_buffer()), ENetPacketPeer.FLAG_UNRELIABLE_FRAGMENT)
+	_handle_return(conn.service(0))
+	#for p: ENetPacketPeer in conn.get_peers():
+		#p.send(0, PackedByteArray("papa".to_multibyte_char_buffer()), ENetPacketPeer.FLAG_UNRELIABLE_FRAGMENT)
 
 func _input(event: InputEvent) -> void:
 	if event.is_action('ui_up'):

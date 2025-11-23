@@ -3,7 +3,7 @@ CXXFLAGS = -Wall -Wextra -std=c++20 -g
 LIBS = -lenet -lspdlog -lfmt
 
 TARGET = rapinae
-SOURCES = main.cpp actor.cpp attribute.cpp map.cpp actor_serializer.cpp
+SOURCES = main.cpp actor.cpp attribute.cpp map.cpp actor_serializer.cpp timer.cpp physics_processor.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 all: $(TARGET)
